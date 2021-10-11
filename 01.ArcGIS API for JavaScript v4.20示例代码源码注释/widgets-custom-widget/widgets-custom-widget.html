@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+    <title>Create a custom widget | Sample | ArcGIS API for JavaScript 4.20</title>
+
+    <style>
+      #btnSpace {
+        padding: 10px;
+      }
+
+      .esri-hello-world {
+        display: inline-block;
+      }
+
+      .esri-hello-world--emphasis {
+        font-weight: bold;
+      }
+    </style>
+    <script>
+      let locationPath = location.pathname.replace(/\/[^\/]+$/, "");
+      window.dojoConfig = {
+        packages: [
+          {
+            name: "app",
+            location: locationPath + "/app"
+          }
+        ]
+      };
+    </script>
+    <script src="https://js.arcgis.com/4.20/"></script>
+    <script>
+      let widget;
+
+    require(["app/HelloWorld", "esri/intl"], (HelloWorld, intl) => {
+      // register message bundle loader for HelloWorld messages
+      intl.registerMessageBundleLoader({
+        pattern: "widgets-custom-widget/assets/",
+        async fetchMessageBundle(bundleId, locale) {
+          const [, filename] = bundleId.split("/t9n/");
+
+          const knownLocale = intl.normalizeMessageBundleLocale(locale);
+          const bundlePath = `./assets/t9n/${filename}_${knownLocale}.json`;
+
+          const response = await fetch(bundlePath);
+          return response.json();
+        }
+      });
+
+      // It is also possible to register the message bundle
+      // loader using syntax similar to what is provided below.
+      // The 'createJSONLoader' is a helper function that provides similar
+      // functionality to what the intl. registerMessageBundleLoader
+      // function does above.
+
+      // const bundleName = "widgets-custom-widget/assets/t9n/widget";
+      // (async () => {
+
+      //   intl.registerMessageBundleLoader(
+      //     intl.createJSONLoader({
+      //       pattern: "widgets-custom-widget/",
+      //       base: "widgets-custom-widget",
+      //       location: new URL("./", window.location.href)
+      //     })
+      //   );
+
+      //   let bundle = await intl.fetchMessageBundle(bundleName);
+      // })();
+
+      let names = [{
+            firstName: "John",
+            lastName: "Smith"
+          },
+          {
+            firstName: "Jackie",
+            lastName: "Miller"
+          },
+          {
+            firstName: "Anna",
+            lastName: "Price"
+          }
+        ],
+        nameIndex = 0;
+
+      const widget = new HelloWorld({
+        firstName: names[nameIndex].firstName,
+        lastName: names[nameIndex].lastName,
+        container: "widgetDiv"
+      });
+
+      function changeName() {
+        widget.set(names[nameIndex++ % names.length]);
+      }
+
+      setInterval(changeName, 1000);
+
+      // Add a very basic button that allows toggling the locale of the
+      // displayed string.
+      const btnLocale = document.createElement("button");
+      btnLocale.style.padding = "10px";
+      btnLocale.classList.add("app-locale-button")
+      btnLocale.innerHTML = "Toggle Locale";
+      document.getElementById("btnSpace").appendChild(btnLocale);
+
+      // Add an event listener for when the button is clicked
+      // If the locale is French, change to English
+      // If the locale is English, change to French
+      btnLocale.addEventListener("click", () => {
+        intl.getLocale() === "fr" ? intl.setLocale("en") : intl.setLocale("fr");
+      });
+    });
+  </script>
+</head>
+
+<body>
+  <div id="widgetDiv" class="esri-widget"></div>
+  <div id="container" class="esri-widget">
+    <div id="btnSpace"></div>
+  </div>
+</body>
+</html>

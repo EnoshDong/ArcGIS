@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no" />
+
+  <title>Feature widget - Query graphics from multiple layerViews | Sample | 4.20</title>
+
+  <link rel="stylesheet" href="https://js.arcgis.com/4.20/esri/themes/light/main.css" />
+  <script src="https://js.arcgis.com/4.20/"></script>
+
+  <script>
+    require([
+      "esri/WebMap",
+      "esri/core/Handles",
+      "esri/views/MapView",
+      "esri/widgets/Feature"
+    ], function (WebMap, Handles, MapView, Feature) {
+
+      const handles = new Handles();
+      const map = new WebMap({
+        portalItem: {
+          // autocasts as new PortalItem
+          id: "bad7aec9c85040b882de64b8224f174c"
+        }
+      });
+
+      const featureContainer = document.getElementById("features");
+      const instructions = document.getElementById("instructions");
+      const view = new MapView({
+        container: "viewDiv",
+        map: map,
+        center: [-118.91, 34.12],
+        zoom: 11,
+        popup: {
+          autoOpenEnabled: false // We do not want the default popup to display
+        }
+      });
+
+      // When view is ready
+      view.when().then(function () {
+        view.on("click", function (event) {
+          // Remove any existing highlighted features
+          handles.removeAll();
+
+          // Clears the parent div's content
+          featureContainer.innerHTML = ""
+          // Call fetchFeatures and pass in the click event location
+          view.popup.fetchFeatures(event).then(function (response) {
+
+            // Iterate through all the returned features to access their
+            // layerview and graphics
+            response.promisesPerLayerView.forEach(function (fetchResult) {
+
+              const layerView = fetchResult.layerView;
+
+              // Iterate through the promise results to access its graphics
+              fetchResult.promise.then(function (graphics) {
+
+                // There is no associated popupTemplate with the basemap layer. If
+                // the returned graphics.length is more than 0, create divs from
+                // the returned graphics.
+                if (graphics.length > 0) {
+
+                  const groupDiv = document.createElement("div");
+                  groupDiv.className = "container";
+                  const layerTitle = document.createElement("h3");
+                  layerTitle.innerHTML = layerView.layer.title;
+                  groupDiv.appendChild(layerTitle)
+                  featureContainer.appendChild(groupDiv);
+
+                  // Iterate through all of the returned graphics from the resulting
+                  // layer views, create a new feature, and append a new div for it.
+                  graphics.forEach(function (graphic) {
+                    // ImageryLayerView does not have highlight so check that it exists
+                    // before calling it. Can also check if (layerView.layer.type === "feature").
+                    if (typeof layerView.highlight === "function") {
+                      handles.add(layerView.highlight(graphic));
+                    }
+                    const featureChild = new Feature({
+                      container: document.createElement("div"),
+                      graphic: graphic,
+                      map: view.map,
+                      spatialReference: view.spatialReference
+                    });
+                    groupDiv.appendChild(featureChild.container);
+                  });
+                }
+              });
+            });
+          });
+        });
+      });
+    });
+  </script>
+</head>
+
+<style>
+  html,
+  body {
+    padding: 0;
+    margin: 0;
+    height: 100%;
+    width: 100%;
+  }
+
+  .flex-container {
+    height: 100%;
+    display: flex;
+    overflow: hidden;
+  }
+
+  #viewDiv {
+    flex: 2;
+    padding: 0;
+    margin: 0;
+  }
+
+  .side-panel {
+    flex: 1;
+    padding: 1em;
+    overflow: auto;
+  }
+
+  .container {
+    border-bottom: solid 1px #ccc;
+  }
+
+  h3 {
+    color: #ffa500;
+  }
+
+  .esri-feature__title {
+    background-color: #e6e6e6;
+    padding: 0.25em;
+  }
+
+  .esri-feature__size-container {
+    background: #f5f5f5;
+  }
+</style>
+
+<body>
+  <div class="flex-container">
+    <div class="esri-widget side-panel">
+      <div id="features" class="feature-container">
+        <div id="instructions">This map has a combination of both <a
+            href="https://developers.arcgis.com/javascript/latest/api-reference/esri-layers-ImageryLayer.html">imagery
+            layers</a> and a <a
+            href="https://developers.arcgis.com/javascript/latest/api-reference/esri-layers-FeatureLayer.html">feature
+            layer</a>. All of the layers have an associated <a
+            href="https://developers.arcgis.com/javascript/latest/api-reference/esri-PopupTemplate.html">popupTemplate</a>.<br>Click
+          on the map to access these individual layers and their respective details.</div>
+      </div>
+    </div>
+    <div id="viewDiv"></div>
+  </div>
+</body>
+
+</html>

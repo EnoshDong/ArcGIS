@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>Editor widget with configurations | Sample | ArcGIS API for JavaScript 4.20</title>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.20/esri/themes/light/main.css" />
+    <script src="https://js.arcgis.com/4.20/"></script>
+
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+
+      .esri-editor .esri-item-list__scroller {
+        max-height: 350px;
+      }
+
+      #configurationDiv {
+        padding: 5px;
+        text-align: left;
+        width: 100%;
+      }
+
+      #info {
+        padding: 14px;
+        border-radius: 5px;
+        width: 75%;
+      }
+    </style>
+
+    <script>
+      require(["esri/WebMap", "esri/views/MapView", "esri/widgets/Editor", "esri/widgets/Expand", "esri/core/watchUtils"], function (
+        WebMap,
+        MapView,
+        Editor,
+        Expand,
+        watchUtils
+      ) {
+          let editConfigCrimeLayer, editConfigPoliceLayer;
+          let checkboxArray = []; // Array containing checkboxDiv's referencing feature snapping layers
+          let snapSource = []; // Holds the source (feature layers) for the snapping configuration
+
+          // Div elements to toggle snapping
+          const enabledSnapDiv = document.getElementById("enabledcheckbox");
+          const selfSnapDiv = document.getElementById("selfsnappingcheckbox");
+          const featureSnapDiv = document.getElementById("featuresnappingcheckbox");
+
+          // Create a map from the referenced webmap item id
+          let webmap = new WebMap({
+            portalItem: {
+              id: "154ba34201774bb29f7c3b68adf52b6a"
+            }
+          });
+
+          let view = new MapView({
+            container: "viewDiv",
+            map: webmap
+          });
+
+        view.when(() => {
+          // Create a custom group to separate the different areas of crime.
+          // This function takes a 'grouping' object containing a featuretemplate and a feature layer.
+
+          function customGroup(grouping) {
+            // If the layer is 'Police routes', do not group.
+            let groupHeading = "Police Routes";
+            if (grouping.layer.title.toLowerCase() === "crime map") {
+              switch (grouping.template.name) {
+                case "Criminal Homicide":
+                case "Rape":
+                case "Robbery":
+                case "Aggravated Assault":
+                  groupHeading = "Violent Crime";
+                  break;
+                case "Arson":
+                case "Burglary":
+                case "Larceny":
+                case "Motor Vehicle Theft":
+                  groupHeading = "Property Crime";
+                  break;
+                default:
+                  groupHeading = "Quality of Life";
+              }
+            }
+            return groupHeading;
+          }
+
+          // Loop through webmap layers and set an EditConfig for each
+          view.map.layers.forEach((layer) => {
+            if (layer.title === "Police routes") {
+              editConfigPoliceLayer = {
+                layer: layer,
+                // Set it so that only one field displays within the form
+                fieldConfig: [{
+                  name: "PatrolType",
+                  label: "Patrol Type"
+                }]
+              };
+            } else {
+              // Specify a few of the fields to edit within the form
+              editConfigCrimeLayer = {
+                layer: layer,
+                fieldConfig: [{
+                    name: "fulladdr",
+                    label: "Full Address"
+                  },
+                  {
+                    name: "neighborhood",
+                    label: "Neighborhood"
+                  },
+                  {
+                    name: "ucrdesc",
+                    label: "UCR Description"
+                  },
+                  {
+                    name: "crimecategory",
+                    label: "Category"
+                  },
+                  {
+                    name: "casestatus",
+                    label: "Status"
+                  }
+                ]
+              };
+            }
+          });
+
+          // Create the Editor
+          const editor = new Editor({
+            view: view,
+            // Pass in the configurations created above
+            layerInfos: [editConfigCrimeLayer, editConfigPoliceLayer],
+            // Override the default template behavior of the Editor widget
+            supportingWidgetDefaults: {
+              featureTemplates: {
+                groupBy: customGroup
+              }
+            }
+            // If no UI is desired, it is possible to set all snapping configurations directly
+            // on the Editor in its SnappingOptions similar to the code snippet below. Toggling
+            // snapping on/off can be achieved via the CTRL key.
+
+            // snappingOptions: { // autocasts to SnappingOptions
+            //   enabled: true,
+            //   selfEnabled: true,
+            //   featureEnabled: true,
+            //   featureSources: [{ layer: crimeLayer}, {layer: policeLayer }]
+            // }
+          });
+
+          // Add widget to top-right of the view
+          view.ui.add(editor, "top-right");
+
+          // Create the UI for feature snapping layer source configurations
+          view.map.loadAll().then(() => {
+            view.map.allLayers.forEach((layer) => {
+              if (layer.visible && (layer.geometryType == "polygon" || layer.geometryType == "polyline" ||
+                  layer.geometryType == "point")) {
+                const table = document.getElementById("configurationTable").getElementsByTagName("tbody")[
+                  0];
+                const row = table.insertRow();
+                let cell = row.insertCell();
+                cell.style = "padding-left: 10px";
+                const label = document.createElement("label");
+                label.innerHTML = layer.title + " (" + layer.geometryType + ")";
+                cell.appendChild(label);
+                let checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.disabled = true;
+                checkbox.name = layer.title;
+                checkbox.id = layer.uid;
+
+                cell = row.insertCell();
+                cell.appendChild(checkbox);
+                checkboxArray.push(checkbox); // add each checkbox (layer to snap) into the array
+
+                // Store all the feature layers
+                snapSource.push({
+                  layer: layer
+                });
+
+                checkbox.addEventListener("change", (event) => {
+                  // Check if the checkbox is checked (true), if so add the feature snap layer source if feature snapping is enabled
+                  if (event.target.checked) {
+                    snapSource.push({
+                      layer: layer
+                    });
+                  } else {
+                    // If not checked, remove that feature source snap layer
+                    const index = getIndex(snapSource, layer.id);
+                    snapSource.splice(index, 1);
+                  }
+                  editor.snappingOptions.featureSources = snapSource;
+                });
+              }
+            });
+          });
+
+          // Watch for when global snapping is enabled/disabled
+          watchUtils.init(editor.snappingOptions, "enabled", (value) => {
+            enabledSnapDiv.checked = editor.snappingOptions.enabled;
+            editor.snappingOptions.featureSources = snapSource;
+          });
+
+          enabledSnapDiv.addEventListener("change", (event) => {
+            editor.snappingOptions.enabled = event.target.checked ? true : false;
+
+            // Disable the self and feature snapping checkboxes if global snapping is disabled
+            selfSnapDiv.disabled = !editor.snappingOptions.enabled; //true;
+            selfSnapDiv.checked = editor.snappingOptions.enabled; //false;
+
+            featureSnapDiv.disabled = !editor.snappingOptions.enabled; //true;
+            featureSnapDiv.checked = editor.snappingOptions.enabled; //false;
+
+            // Disable and uncheck the feature source snapping layers if global snapping is disabled
+            checkboxArray.forEach((chkBox) => {
+              chkBox.disabled = !editor.snappingOptions.enabled; //true;
+              chkBox.checked = editor.snappingOptions.enabled; //false;
+            });
+          });
+
+          // Listen for for when self snapping is toggled and set the
+          // selfEnabled property accordingly
+          selfSnapDiv.addEventListener("change", (event) => {
+            editor.snappingOptions.selfEnabled = event.target.checked ? true : false;
+          });
+
+          // Listen for for when feature snapping is toggled and set the
+          // featureEnabled property accordingly
+          featureSnapDiv.addEventListener("change", (event) => {
+            editor.snappingOptions.featureEnabled = event.target.checked ? true : false;
+          });
+
+          // Make sure that feature snapping is enabled and then check layers. If disabled, uncheck layers.
+          watchUtils.watch(editor.snappingOptions, "featureEnabled", (value) => {
+            // If feature snapping is disabled, uncheck the feature source snapping layers and disable checkbox
+            console.log("featureEnabled changed to: ", value);
+            if (!value) {
+              checkboxArray.forEach((checkDiv) => {
+                checkDiv.disabled = true;
+              })
+            } else {
+              // If feature snapping is enabled, check the feature source snapping layers and enable checkbox
+              checkboxArray.forEach((checkDiv) => {
+                checkDiv.disabled = false;
+              })
+            }
+          });
+
+          const configurationExpand = new Expand({
+            expandIconClass: "esri-icon-settings2",
+            expandTooltip: "Show snapping configuration",
+            expanded: false,
+            view: view,
+            content: document.getElementById("configurationDiv")
+          });
+
+          view.ui.add([{
+              component: configurationExpand,
+              position: "bottom-right",
+              index: 0
+            },
+            {
+              component: "info",
+              position: "bottom-right",
+              index: 1
+            }
+          ]);
+
+          // Watch for an active workflow (edit or add a new feature) and open snapping dialog
+          // If this is not needed, disable this section completely.
+          editor.watch("activeWorkflow", (value) => {
+            if ((value) && (value.started !== null && value.started)) {
+              configurationExpand.expanded = true;
+            } else {
+              configurationExpand.expanded = false;
+            }
+          })
+
+          // If the snapping configuration is toggled open, hide the info window
+          configurationExpand.watch("expanded", (value) => {
+            if (value) {
+              document.getElementById("info").classList.add("esri-hidden");
+            } else {
+              document.getElementById("info").classList.remove("esri-hidden");
+            }
+          });
+
+        });
+
+        // return the index position of the feature snapping source layer
+        function getIndex(source, layerId) {
+          const layers = source.map((item) => {
+            return item.layer.id;
+          });
+          return layers.indexOf(layerId);
+        }
+
+      });
+  </script>
+</head>
+
+<body>
+  <div id="viewDiv"></div>
+  <div id="info" class="esri-widget">
+    <h3>This sample shows how snapping can be enabled:</h3>
+    <ul>
+      <li>
+        Click one of the workflows above and check <b>Snapping enabled</b> in the provided snapping dialog.
+        This must be enabled to work with either <b>self snapping</b> or <b>feature snapping</b>. If <b>feature
+          snapping</b> is needed, select one or more of the feature layer sources.
+      </li>
+      <li>
+        If not wanting to use the provided UI, set the appropriate <b>SnappingOptions</b> within the Editor. Comments
+        are provided in the sample providing information on how to do this.
+      </li>
+    </ul>
+  </div>
+
+  <div id="editorDiv"></div>
+  <div id="configurationDiv" class="esri-widget">
+    <table id="configurationTable">
+      <tr>
+        <td>
+          <label for="enabledcheckbox" id="enabledcheckboxlabel"><b>SnappingOptions.enabled</b></label>
+        </td>
+        <td><input type="checkbox" id="enabledcheckbox" /></td>
+      </tr>
+      <tr>
+        <td style="padding-left: 5px"><label for="selfsnappingcheckbox"
+            id="selfsnappingcheckboxlabel">SnappingOptions.selfEnabled</label></td>
+        <td><input type="checkbox" id="selfsnappingcheckbox" disabled="disabled" /></td>
+      </tr>
+      <tr>
+        <td style="padding-left: 5px"><label for="featuresnappingcheckbox"
+            id="featuresnappingcheckboxlabel">SnappingOptions.featureEnabled</label></td>
+        <td><input type="checkbox" id="featuresnappingcheckbox" disabled="disabled" /></td>
+      </tr>
+      <tr>
+        <td>
+          <hr style="margin:15px;" />
+        </td>
+      </tr>
+      <tr>
+        <td><label><b>SnappingOptions.featureSources</b></label>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding-bottom: 5px"><label>(layers used for feature snapping)</label>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+
+</html>

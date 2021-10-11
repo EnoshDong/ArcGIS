@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>Area measurement layer | Sample | ArcGIS API for JavaScript 4.20</title>
+
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+      #info {
+        padding: 1em;
+        max-width: 300px;
+      }
+    </style>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.20/esri/themes/light/main.css" />
+    <script src="https://js.arcgis.com/4.20/"></script>
+
+    <script>
+      require(["esri/WebScene", "esri/layers/AreaMeasurementLayer", "esri/views/SceneView"], (
+        WebScene,
+        AreaMeasurementLayer,
+        SceneView
+      ) => {
+        const map = new WebScene({
+          portalItem: {
+            id: "340f87d4f3ef4184b04bcd76261cdf9c"
+          }
+        });
+
+        const view = new SceneView({
+          container: "viewDiv",
+          map,
+          qualityProfile: "high"
+        });
+
+        const areaMeasurementLayer = new AreaMeasurementLayer();
+        map.layers.add(areaMeasurementLayer);
+
+        view.when(() => {
+          const hitTestLayers = view.map.layers.filter((layer) => layer.title === "Parcels");
+          view.on("click", async (event) => {
+            // remove the current measured geometry from the layer when the user clicks on the map
+            areaMeasurementLayer.geometry = null;
+            // get results only from the "Parcels" layer
+            const hitTestResult = await view.hitTest(event, { include: hitTestLayers });
+            if (hitTestResult.results.length > 0) {
+              const geometry = hitTestResult.results[0].graphic.geometry;
+              // pass the polygon geometry to the areaMeasurementLayer to display a new measurement
+              areaMeasurementLayer.geometry = geometry;
+              // zoom to the selected geometry
+              view.goTo(geometry);
+            }
+          });
+        });
+
+        view.ui.add("info", "top-right");
+      });
+    </script>
+  </head>
+
+  <body>
+    <div id="viewDiv"></div>
+
+    <div id="info" class="esri-widget">Click on a parcel polygon to display its area and perimeter.</div>
+  </body>
+</html>

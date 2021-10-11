@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>Query client-side 3D extents | Sample | ArcGIS API for JavaScript 4.20</title>
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+      #infoDiv {
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 10px;
+      }
+      h3 {
+        border-bottom: 1px solid black;
+      }
+      img {
+        max-height: 200px;
+        max-width: 200px;
+      }
+    </style>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.20/esri/themes/light/main.css" />
+    <script src="https://js.arcgis.com/4.20/"></script>
+
+    <script>
+      require(["esri/WebScene", "esri/views/SceneView", "esri/rest/support/Query"], (
+        WebScene,
+        SceneView,
+        Query
+      ) => {
+        // load web scene from ArcGIS Online
+        const webscene = new WebScene({
+          portalItem: {
+            // autocasts as new PortalItem()
+            id: "bde8e884a5064f48bcf3440964d748e2"
+          }
+        });
+
+        // create the scene view
+        const view = new SceneView({
+          container: "viewDiv",
+          map: webscene,
+          environment: {
+            lighting: {
+              ambientOcclusionEnabled: true
+            }
+          }
+        });
+
+        // wait until the webscene finished loading
+        webscene.when(() => {
+          // retrieve the scene layer from the webscene - in this case it is the first layer
+          const sceneLayer = webscene.layers.getItemAt(0);
+          // get all attributes for the query
+          sceneLayer.outFields = ["*"]
+
+          // retrieve the layer view of the scene layer
+          view.whenLayerView(sceneLayer).then((sceneLayerView) => {
+            // register a click event on the view
+            view.on("click", (event) => {
+              // use hitTest to find if any graphics were clicked
+              view.hitTest(event).then((response) => {
+                // check if a graphic is returned from the hitTest
+                if (response.results[0].graphic) {
+                  // Create query object: by specifying objectIds, the query will return results only for
+                  // the feature matching the graphic's objectid
+                  const query = new Query({
+                    objectIds: [response.results[0].graphic.attributes.OBJECTID],
+                    // indicates the query should return all attributes
+                    outFields: ["*"]
+                  });
+
+                  // queryExtent() will return the 3D extent of the feature that satisfies the query
+                  sceneLayerView.queryExtent(query).then((result) => {
+                    view.goTo(
+                      {
+                        target: result.extent.expand(2),
+                        tilt: 60
+                      },
+                      {
+                        duration: 1000,
+                        easing: "out-expo"
+                      }
+                    )
+                    .catch((error) => {
+                        if (error.name != "AbortError") {
+                          console.error(error);
+                        }
+                      });
+                  });
+
+                  // queryFeatures() will return the feature that satisfies the query - we can then get all the attributes of the feature
+                  sceneLayerView.queryFeatures(query).then((result) => {
+                    showInfo(result.features[0].attributes);
+                  });
+                }
+              });
+            });
+          });
+        });
+
+        // function that displays some of the attributes of the feature in an HTML element
+        function showInfo(attributes) {
+          document.getElementById("infoDiv").innerHTML = `<h3> ${attributes.Building_N} </h3>
+            <p>Address: ${attributes.Address}</p>
+            <p>City: ${attributes.City}</p>
+            <p>Construction year: ${attributes.Construction}</p>
+            <img src='${attributes.AA2_Photo.replace('http', 'https')}' alt=''>`;
+        }
+
+        // add HTML element to the view
+        view.ui.add(document.getElementById("infoDiv"), "top-right");
+      });
+    </script>
+  </head>
+
+  <body>
+    <div id="infoDiv" class="esri-widget">
+      Click on a building to zoom to it and get more information
+    </div>
+    <div id="viewDiv"></div>
+  </body>
+</html>
